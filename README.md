@@ -2,8 +2,6 @@
 
 Sharon Dong (pennkey: sharondo)
 
-Live demo: https://sharond106.github.io/hw02-raymarching-sdfs/
-
 ![Demo](https://media.giphy.com/media/yEBYLNNHVoXVJyJBNT/giphy.gif)
 
 Reference: 
