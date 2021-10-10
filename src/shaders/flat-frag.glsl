@@ -17,8 +17,11 @@ const float MAX_RAY_DEPTH = -3.;
 const float FOV = 0.25 * 3.141569;
 const float EPSILON = .001;
 const float BOX_EPSILON = .01;
-const vec3 LIGHT = vec3(4, 2, 7);
-// const vec3 LIGHT = vec3(0, 6, -1);
+const vec3 LIGHT = vec3(-2, 3, -5);
+const vec3 LIGHT2 = vec3(-3, 3, -4);
+const vec3 LIGHT3 = vec3(2, 4, 4);
+const vec3 LIGHT4 = vec3(3, -4, -6);
+const vec3 LIGHT5 = vec3(-6, -4, 0);
 const int TABLE = 0;
 const int BOWL = 1;
 const int SOUP = 2;
@@ -30,6 +33,7 @@ const int MUSHROOM = 7;
 const int ENOKI = 8;
 const int CHOPSTICKS = 9;
 const int HOLDER = 10;
+const int MUSHROOM_OUTSIDE = 11;
 
 
 struct Ray 
@@ -108,7 +112,7 @@ mat4 inverseScale(vec3 scale) {
     s[0] = vec4(scale.x, 0., 0., 0.);
     s[1] = vec4(0., scale.y, 0., 0.);
     s[2] = vec4(0., 0., scale.z, 0.);
-	s[3] = vec4(0., 0., 0., 1.);
+	  s[3] = vec4(0., 0., 0., 1.);
     return s;   
 }
 
@@ -294,8 +298,9 @@ float chopsticks(vec3 p, out int obj) {
   mat4 invRotate = inverseRotateY(-30.);
   float chopsticks = min(sdRoundCone(p, vec3(1., -.88, -1), vec3(2.6, -1.37, .2), .02 ,.05),
               sdRoundCone(p, vec3(1.1, -.88, -.9), vec3(2.8, -1.37, .2), .02 ,.05));
-  float f = fbm((p.x + 2.3)*.2, p.y*.2, p.z*.2);
-  p.y -= f/ 8.;
+  // float f = fbm((p.x + 2.3)*.2, p.y*.2, p.z*.2);
+  // p.y -= f/ 8.;
+  p.y -= .06;
   float holder = opSmoothSubtraction( 
                           sdBox(vec3(invRotate * vec4(p - vec3(1.3, -1., -.8), 1)), vec3(.15, .07, .5)) - .05,
                           sdBox(vec3(invRotate * vec4(p - vec3(1.3, -1.2, -.8), 1)), vec3(.3, .15, .23)) - .05, .05);
@@ -362,7 +367,7 @@ float eggYolk(vec3 p) {
   if (box > BOX_EPSILON) {
     return box;
   }
-  float f = fbm((p.x + 2.3)*.7, p.y*.7, p.z*.7);
+  float f = fbm((p.x + 2.4)*.7, p.y*.7, p.z*.7);
   p.y -= f * f/ 8.;
   p.y += .046;
   vec3 a = vec3(inverseRotate(vec3(-20, -10, 0)) * vec4(p - vec3(-.05, .04, -.1), 1));
@@ -420,7 +425,8 @@ float sausages(vec3 p) {
   return min(front, back);
 }
 
-float mushroom(vec3 p) {
+float mushroom(vec3 p, out int obj) {
+  p.z += .05;
   float box = sdBox(p - vec3(.05, .12, -.5), vec3(.2, .3, .25));
   if (box > BOX_EPSILON) {
     return box;
@@ -430,20 +436,35 @@ float mushroom(vec3 p) {
   p.z += .65;
   vec4 rotated = inverseRotate(vec3(10, -70, 15)) * vec4(p, 1); 
   vec4 rotated2 = inverseRotate(vec3(20, -120, 15)) * vec4(p, 1); 
-  return opSmoothUnion(sdBox(vec3(rotated - vec4(-.06, .1, -.11, 0)), vec3(.0005, .25, .08)) - .02, 
-        // mushroom top
-        opSmoothSubtraction(sdEllipsoid(p - vec3(.05, .2, .02), vec3(.3, .05, .3)),
-                            max(max(sdCappedCone(p - vec3(0, .3, 0), .002, .3, .3) - .12, rotated2.x), rotated.z), .02), .01); 
+  float ellipsoid = sdEllipsoid(p - vec3(.05, .2, .02), vec3(.3, .04, .3));
+  float cone = sdCappedCone(p - vec3(0, .3, 0), .002, .3, .3) - .12;
+  float top = opSmoothSubtraction(ellipsoid,
+                            max(max(cone, rotated2.x), rotated.z), .02);
+  if (opSmoothSubtraction(ellipsoid, abs(cone) - .008, .02) < EPSILON) {
+    obj = MUSHROOM_OUTSIDE;
+  } else {
+    obj = MUSHROOM;
+  }
+  return opSmoothUnion(sdBox(vec3(rotated - vec4(-.06, .07, -.11, 0)), vec3(.0005, .25, .08)) - .03, 
+                      top, .01); 
 }
 
-float mushroom2(vec3 p) {
-  float box = sdBox(p - vec3(-.3, .14, -.4), vec3(.3, .35, .3));
+float mushroom2(vec3 p, out int objHit) {
+  p.z +=.02;
+  vec3 temp = vec3(inverseRotateY(-20.) * vec4(p - vec3(-.32, .3, -.55), 1));
+  float box = sdBox(temp, vec3(.25, .5, .15));
   if (box > BOX_EPSILON) {
     return box;
   }
   p = vec3(inverseRotate(vec3(10, -20, -10)) * vec4(p - vec3(-.4, .3, -.7), 1));
-  return opSmoothUnion(sdCappedCone(p, .002, .15, .1) - .07,
-                    sdBox(p - vec3(0, -.3, 0), vec3(.1, .3, .05)), .05);
+  float top = sdCappedCone(p, .002, .15, .1) - .07;
+  if (top < EPSILON) {
+    objHit = MUSHROOM_OUTSIDE;
+  } else {
+    objHit = MUSHROOM;
+  }
+  return opSmoothUnion(top,
+                    sdBox(p - vec3(0, -.3, 0), vec3(.1, .3, .04)) - .03, .05);
 }
 
 float GetBias(float time, float bias) {
@@ -490,58 +511,61 @@ float sceneSDF(vec3 p, out int objHit, bool normal) {
   float x = 10000000.;
   float t = sdBox(p - vec3(-.48, -.4, -.02), vec3(1.1, .8, 1.2));
   if (t <= BOX_EPSILON) {
-    // t = bowl(p);
-    // if (t < x) {
-    //   x = t;
-    //   objHit = BOWL;
-    // }
-    // t = enokis(p);
-    // if (t < x) {
-    //   x = t;
-    //   objHit = ENOKI;
-    // }
-    // t = eggWhite(p);
-    // if (t < x) {
-    //   x = t;
-    //   objHit = EGGwHITE;
-    // }
-    // t = eggYolk(p);
-    // if (t < x) {
-    //   x = t;
-    //   objHit = EGGYOLK;
-    // }
-    // t = soup(p);
-    // if (t < x) {
-    //   x = t;
-    //   objHit = SOUP;
-    // }
-    // t = noodle(p);
-    // if (t < x) {
-    //   x = t;
-    //   objHit = NOODLES;
-    // }
-    // t = sausages(p);
-    // if (t < x) {
-    //   x = t;
-    //   objHit = SAUSAGE;
-    // }
-    // t = mushroom(p);
-    // if (t < x) {
-    //   x = t;
-    //   objHit = MUSHROOM;
-    // }
-    // t = mushroom2(p);
-    // if (t < x) {
-    //   x = t;
-    //   objHit = MUSHROOM;
-    // }
+    t = bowl(p);
+    if (t < x) {
+      x = t;
+      objHit = BOWL;
+    }
+    t = enokis(p);
+    if (t < x) {
+      x = t;
+      objHit = ENOKI;
+    }
+    t = eggWhite(p);
+    if (t < x) {
+      x = t;
+      objHit = EGGwHITE;
+    }
+    t = eggYolk(p);
+    if (t < x) {
+      x = t;
+      objHit = EGGYOLK;
+    }
+    t = soup(p);
+    if (t < x) {
+      x = t;
+      objHit = SOUP;
+    }
+    t = noodle(p);
+    if (t < x) {
+      x = t;
+      objHit = NOODLES;
+    }
+    t = sausages(p);
+    if (t < x) {
+      x = t;
+      objHit = SAUSAGE;
+    }
+    int temp;
+    t = mushroom(p, temp);
+    if (t < x) {
+      x = t;
+      objHit = temp;
+    }
+    t = mushroom2(p, temp);
+    if (t < x) {
+      x = t;
+      objHit = temp;
+    }
   } else {
     if (t < x)
       x = t;
   }
-  t = chopsticks(p, objHit);
+  int temp;
+  t = chopsticks(p, temp);
   if (t < x) {
     x = t;
+    objHit = temp;
   }
   t = table(p, normal);
   if (t < x) {
@@ -622,66 +646,98 @@ Intersection getRaymarchedIntersectionSmoke(vec2 uv) {
     return intersection;
 }
 
+vec3 contrast(vec3 rgb, float c) {
+    float f = 259.0 * (c + 255.0) / (255.0 * (259.0 - c));
+    return clamp(f * (rgb - vec3(0.5)) + vec3(0.5), 0.0, 1.0);
+}
+
 vec4 getSceneColor(vec2 uv) {
+    vec3 albedo = vec3(0);
     vec3 color = vec3(0);
     Intersection intersection = getRaymarchedIntersection(uv);
     if (intersection.distance_t > 0.0) { 
-      float diffuseTerm = dot(intersection.normal, normalize(LIGHT - intersection.position));
-      diffuseTerm = clamp(diffuseTerm, 0.f, 1.f);
-      float ambientTerm = 0.2;
-      float lightIntensity = diffuseTerm + ambientTerm;
+      float diffuseTerm = clamp(dot(intersection.normal, normalize(LIGHT - intersection.position)), 0., 1.);
+      float lightIntensity = diffuseTerm;
+
+      float diffuseTerm2 = clamp(dot(intersection.normal, normalize(LIGHT2 - intersection.position)), 0., 1.);
+      float lightIntensity2 = diffuseTerm2;
+
+      float diffuseTerm3 = clamp(dot(intersection.normal, normalize(LIGHT3 - intersection.position)), 0., 1.);
+      float lightIntensity3 = diffuseTerm3;
+
+      float diffuseTerm4 = clamp(dot(intersection.normal, normalize(LIGHT4 - intersection.position)), 0., 1.);
+      float lightIntensity4 = diffuseTerm4;
+      
       vec3 view = normalize(u_Eye - intersection.position);
       vec3 H = normalize(view + normalize(LIGHT));
-      float specularIntensity = max(pow(dot(H, normalize(intersection.normal)), 40.), 0.);
-      // color = vec3(1., .88, .7); 
-      color = vec3(1., .9, .8); 
-      // putting to power of > 1 darkens shadows- gamma correction
-      // pow(color, vec4(1/2.2))  // use with darker material colors for photorealistic
-      // color = pow(1.4 * color, vec3(1.5, 1.2, 1));
+      float specularIntensity = max(pow(dot(H, normalize(intersection.normal)), 5.), 0.) / 2.;
+      vec3 H2 = normalize(view + normalize(LIGHT4));
+      float specularIntensity2 = max(pow(dot(H2, normalize(intersection.normal)), 5.), 0.) / 1.5;
+      vec3 H3 = normalize(view + normalize(LIGHT5));
+      float specularIntensity3 = max(pow(dot(H3, normalize(intersection.normal)), 5.), 0.) / 1.5;
+      
       switch(intersection.material_id) {
         case TABLE:
-          color = vec3(.5);
+          albedo = vec3(.2) + specularIntensity / 5.;
           break;
         case EGGwHITE:
-          color = vec3(1) + specularIntensity;
+          albedo = vec3(1);
+          albedo /= 1.4;
           break;
         case EGGYOLK:
-          color = vec3(1, .87, .07);
+          albedo = vec3(1, .84, .07);
+          albedo /= 1.4;
           break;
         case NOODLES:
-          color = vec3(.94, .87, .588);
+          albedo = vec3(.94, .87, .588);
+          albedo /= 1.4;
           break;
         case BOWL:
-          color = vec3(.2) + specularIntensity;
+          albedo = vec3(0) + specularIntensity + specularIntensity2 + specularIntensity3;
           break;
         case SAUSAGE:
           float f =  fbm(intersection.position.x*2. - 6., intersection.position.y*2., intersection.position.z*2.);
-          color = mix(vec3(.85, .3176, .035), vec3(.9, .66, .46), (f * f * 2.)) + specularIntensity;
+          albedo = mix(vec3(.85, .3176, .035), vec3(.9, .66, .46), (f * f * 2.)) * .8 + specularIntensity;
+          albedo /= 1.4;
           break;
         case SOUP:
-          color = vec3(1., .9, .8) + specularIntensity;
+          albedo = vec3(1., .9, .8);
+          albedo /= 1.4;
           break;
         case MUSHROOM:
-          color = vec3(.72, .65, .533);
+          albedo = vec3(.72, .65, .533);
+          albedo /= 1.4;
           break;
+        case MUSHROOM_OUTSIDE:
+          albedo = vec3(.57, .4, .283);
+          albedo /= 1.4;
+          break; 
         case ENOKI:
-          color = vec3(.96, .95, .86);
+          albedo = vec3(.96, .95, .8);
+          albedo /= 1.4;
           break;
         case CHOPSTICKS:
           f =  fbm(intersection.position.x*5., intersection.position.y*5., intersection.position.z*5.);
-          color = vec3(.36, .3, .266) * (1. - f / 4.);
+          albedo = vec3(.36, .3, .266) * (1. - f / 4.);
+          // albedo /= 1.4;
           break;
         case HOLDER:
           f =  fbm(intersection.position.x, intersection.position.y, intersection.position.z);
-          color = vec3(.52, .44, .35) * (1. - f / 4.);
+          albedo = vec3(.52, .44, .35) * (1. - f / 4.);
+          albedo /= 1.4;
           break;
       }
-      color = (color * lightIntensity) * shadow(normalize(LIGHT - intersection.position), intersection.position);
+      color = albedo * lightIntensity3;
+      albedo /= 3.;
+      color += albedo * lightIntensity * shadow(normalize(LIGHT - intersection.position), intersection.position);
+      color += albedo * lightIntensity2 * shadow(normalize(LIGHT2 - intersection.position), intersection.position);
+      color = pow(color, vec3(.75));
+      color = contrast(color, 90.);
     }
-    // Intersection smoke = getRaymarchedIntersectionSmoke(uv);
-    // if (smoke.distance_t > 0.0) {
-    //   return vec4(color, 1. - (smoke.distance_t) * 1.);
-    // }
+    Intersection smoke = getRaymarchedIntersectionSmoke(uv);
+    if (smoke.distance_t > 0.0) {
+      return vec4(color, 1. - (smoke.distance_t) * 1.);
+    }
     return vec4(color, 1);
 }
 
